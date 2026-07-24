@@ -38,11 +38,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (!order?.proofFile) return jsonError("Payment proof not found.", 404);
   const creatorKey = new URL(request.url).searchParams.get("key");
   if (!(await verifyCreator(order.menuId, creatorKey))) return jsonError("Creator access required.", 403);
-  const contents = await readUpload(order.proofFile);
-  if (!contents) return jsonError("Payment proof not found.", 404);
-  return new Response(contents, {
+  const upload = await readUpload(order.proofFile);
+  if (!upload) return jsonError("Payment proof not found.", 404);
+  return new Response(upload.contents, {
     headers: {
-      "content-type": order.proofMime || "application/octet-stream",
+      "content-type": upload.contentType || order.proofMime || "application/octet-stream",
       "cache-control": "private, no-store",
       "content-disposition": "inline",
     },

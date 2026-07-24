@@ -1,6 +1,7 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { createAppStateTableSql, seedAppStateSql } from "@/db/schema";
 
 export type MenuItemRecord = {
   id: string;
@@ -40,41 +41,80 @@ type Database = {
   orders: OrderRecord[];
 };
 
-const dataDirectory = process.env.TINYTABLE_DATA_DIR
-  ? path.resolve(process.env.TINYTABLE_DATA_DIR)
-  : path.join(process.cwd(), "data");
-const databasePath = path.join(dataDirectory, "tinytable.json");
-const uploadDirectory = path.join(dataDirectory, "uploads");
+type AppStateRow = {
+  data: string;
+  version: number;
+};
+
+type Bindings = {
+  DB: D1Database;
+  UPLOADS: R2Bucket;
+};
+
 const emptyDatabase: Database = { menus: [], orders: [] };
+let schemaReady: Promise<void> | null = null;
 
-let writeQueue = Promise.resolve();
+function getBindings() {
+  return getCloudflareContext().env as unknown as Bindings;
+}
 
-async function ensureDataDirectory() {
-  await mkdir(uploadDirectory, { recursive: true });
+async function ensureDatabase(database: D1Database) {
+  schemaReady ??= database
+    .batch([
+      database.prepare(createAppStateTableSql),
+      database.prepare(seedAppStateSql),
+    ])
+    .then(() => undefined)
+    .catch((cause) => {
+      schemaReady = null;
+      throw cause;
+    });
+  await schemaReady;
+}
+
+function parseDatabase(contents: string): Database {
+  const database = JSON.parse(contents) as Partial<Database>;
+  if (!Array.isArray(database.menus) || !Array.isArray(database.orders)) {
+    throw new Error("Stored application data is invalid.");
+  }
+  return database as Database;
 }
 
 export async function readDatabase(): Promise<Database> {
-  await ensureDataDirectory();
-  try {
-    const contents = await readFile(databasePath, "utf8");
-    return JSON.parse(contents) as Database;
-  } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return structuredClone(emptyDatabase);
-    throw cause;
-  }
+  const database = getBindings().DB;
+  await ensureDatabase(database);
+  const row = await database
+    .prepare("SELECT data, version FROM app_state WHERE id = 1")
+    .first<AppStateRow>();
+  return row ? parseDatabase(row.data) : structuredClone(emptyDatabase);
 }
 
-export function updateDatabase<T>(update: (database: Database) => T | Promise<T>): Promise<T> {
-  const operation = writeQueue.then(async () => {
-    const database = await readDatabase();
+export async function updateDatabase<T>(
+  update: (database: Database) => T | Promise<T>,
+): Promise<T> {
+  const databaseBinding = getBindings().DB;
+  await ensureDatabase(databaseBinding);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const row = await databaseBinding
+      .prepare("SELECT data, version FROM app_state WHERE id = 1")
+      .first<AppStateRow>();
+    const database = row ? parseDatabase(row.data) : structuredClone(emptyDatabase);
+    const version = row?.version ?? 0;
     const result = await update(database);
-    const temporaryPath = `${databasePath}.${randomUUID()}.tmp`;
-    await writeFile(temporaryPath, JSON.stringify(database, null, 2), "utf8");
-    await rename(temporaryPath, databasePath);
-    return result;
-  });
-  writeQueue = operation.then(() => undefined, () => undefined);
-  return operation;
+    const saved = await databaseBinding
+      .prepare(`
+        UPDATE app_state
+        SET data = ?, version = ?, updated_at = ?
+        WHERE id = 1 AND version = ?
+      `)
+      .bind(JSON.stringify(database), version + 1, Date.now(), version)
+      .run();
+
+    if ((saved.meta.changes ?? 0) === 1) return result;
+  }
+
+  throw new Error("The data changed while saving. Please try again.");
 }
 
 export function cleanText(value: unknown, max: number, required = false) {
@@ -112,13 +152,18 @@ const allowedImageTypes = new Map([
   ["image/webp", "webp"],
 ]);
 
+function safeUploadName(fileName: string) {
+  return /^[a-z]+-[0-9a-f-]+\.(png|jpg|webp)$/.test(fileName);
+}
+
 export async function saveImage(file: File, category: "menu" | "proof") {
   const extension = allowedImageTypes.get(file.type);
   if (!extension) throw new Error("Use a PNG, JPG, or WebP image.");
   if (file.size > 5 * 1024 * 1024) throw new Error("The image must be smaller than 5 MB.");
-  await ensureDataDirectory();
   const fileName = `${category}-${randomUUID()}.${extension}`;
-  await writeFile(path.join(uploadDirectory, fileName), Buffer.from(await file.arrayBuffer()));
+  await getBindings().UPLOADS.put(fileName, await file.arrayBuffer(), {
+    httpMetadata: { contentType: file.type },
+  });
   return {
     fileName,
     mimeType: file.type,
@@ -127,21 +172,18 @@ export async function saveImage(file: File, category: "menu" | "proof") {
 }
 
 export async function readUpload(fileName: string) {
-  if (path.basename(fileName) !== fileName) return null;
-  try {
-    return await readFile(path.join(uploadDirectory, fileName));
-  } catch {
-    return null;
-  }
+  if (!safeUploadName(fileName)) return null;
+  const object = await getBindings().UPLOADS.get(fileName);
+  if (!object) return null;
+  return {
+    contents: await object.arrayBuffer(),
+    contentType: object.httpMetadata?.contentType || null,
+  };
 }
 
 export async function removeUpload(fileNameOrUrl: string | null) {
   if (!fileNameOrUrl) return;
   const fileName = fileNameOrUrl.split("/").pop();
-  if (!fileName || path.basename(fileName) !== fileName) return;
-  try {
-    await unlink(path.join(uploadDirectory, fileName));
-  } catch {
-    // An already-missing orphan is harmless.
-  }
+  if (!fileName || !safeUploadName(fileName)) return;
+  await getBindings().UPLOADS.delete(fileName);
 }
