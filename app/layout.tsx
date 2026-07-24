@@ -7,7 +7,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = requestHeaders.get("host") || "localhost:3000";
   const protocol = requestHeaders.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
   const metadataBase = new URL(`${protocol}://${host}`);
-  const title = "TinyTable — Simple group ordering";
+  const title = "MI Jajan — Simple group ordering";
   const description = "Create a menu, share one link, collect payment proof, and track who has paid.";
   return {
     metadataBase,

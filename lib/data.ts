@@ -1,61 +1,80 @@
-import { env } from "cloudflare:workers";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 
-type AppEnv = {
-  DB: D1Database;
-  PROOFS: R2Bucket;
+export type MenuItemRecord = {
+  id: string;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  imageUrl: string | null;
 };
 
-export function bindings() {
-  return env as unknown as AppEnv;
+export type MenuRecord = {
+  id: string;
+  title: string;
+  note: string | null;
+  paymentInstructions: string | null;
+  paymentImageUrl: string | null;
+  showPublicOrders: boolean;
+  adminHash: string;
+  createdAt: number;
+  items: MenuItemRecord[];
+};
+
+export type OrderRecord = {
+  id: string;
+  menuId: string;
+  customerName: string;
+  sellerNote: string | null;
+  totalCents: number;
+  status: "unpaid" | "paid";
+  proofFile: string | null;
+  proofMime: string | null;
+  createdAt: number;
+  items: Array<{ name: string; quantity: number; priceCents: number }>;
+};
+
+type Database = {
+  menus: MenuRecord[];
+  orders: OrderRecord[];
+};
+
+const dataDirectory = process.env.TINYTABLE_DATA_DIR
+  ? path.resolve(process.env.TINYTABLE_DATA_DIR)
+  : path.join(process.cwd(), "data");
+const databasePath = path.join(dataDirectory, "tinytable.json");
+const uploadDirectory = path.join(dataDirectory, "uploads");
+const emptyDatabase: Database = { menus: [], orders: [] };
+
+let writeQueue = Promise.resolve();
+
+async function ensureDataDirectory() {
+  await mkdir(uploadDirectory, { recursive: true });
 }
 
-let schemaReady: Promise<void> | null = null;
-
-export function ensureSchema() {
-  if (!schemaReady) {
-    const { DB } = bindings();
-    schemaReady = DB.batch([
-      DB.prepare(`CREATE TABLE IF NOT EXISTS menus (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        note TEXT,
-        payment_instructions TEXT,
-        admin_hash TEXT NOT NULL,
-        created_at INTEGER NOT NULL
-      )`),
-      DB.prepare(`CREATE TABLE IF NOT EXISTS menu_items (
-        id TEXT PRIMARY KEY,
-        menu_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        description TEXT,
-        price_cents INTEGER NOT NULL,
-        position INTEGER NOT NULL,
-        FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE
-      )`),
-      DB.prepare(`CREATE TABLE IF NOT EXISTS orders (
-        id TEXT PRIMARY KEY,
-        menu_id TEXT NOT NULL,
-        customer_name TEXT NOT NULL,
-        total_cents INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'unpaid',
-        proof_key TEXT,
-        created_at INTEGER NOT NULL,
-        FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE
-      )`),
-      DB.prepare(`CREATE TABLE IF NOT EXISTS order_items (
-        id TEXT PRIMARY KEY,
-        order_id TEXT NOT NULL,
-        item_name TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        price_cents INTEGER NOT NULL,
-        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-      )`),
-      DB.prepare("CREATE INDEX IF NOT EXISTS menu_items_menu_idx ON menu_items(menu_id)"),
-      DB.prepare("CREATE INDEX IF NOT EXISTS orders_menu_idx ON orders(menu_id)"),
-      DB.prepare("CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items(order_id)"),
-    ]).then(() => undefined);
+export async function readDatabase(): Promise<Database> {
+  await ensureDataDirectory();
+  try {
+    const contents = await readFile(databasePath, "utf8");
+    return JSON.parse(contents) as Database;
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return structuredClone(emptyDatabase);
+    throw cause;
   }
-  return schemaReady;
+}
+
+export function updateDatabase<T>(update: (database: Database) => T | Promise<T>): Promise<T> {
+  const operation = writeQueue.then(async () => {
+    const database = await readDatabase();
+    const result = await update(database);
+    const temporaryPath = `${databasePath}.${randomUUID()}.tmp`;
+    await writeFile(temporaryPath, JSON.stringify(database, null, 2), "utf8");
+    await rename(temporaryPath, databasePath);
+    return result;
+  });
+  writeQueue = operation.then(() => undefined, () => undefined);
+  return operation;
 }
 
 export function cleanText(value: unknown, max: number, required = false) {
@@ -68,26 +87,61 @@ export function cleanText(value: unknown, max: number, required = false) {
   return text || null;
 }
 
-export async function hashSecret(secret: string) {
-  const bytes = new TextEncoder().encode(secret);
-  const hash = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
+export function hashSecret(secret: string) {
+  return createHash("sha256").update(secret).digest("hex");
 }
 
 export function newSecret() {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  return btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+  return randomBytes(24).toString("base64url");
 }
 
 export async function verifyCreator(menuId: string, creatorKey: string | null) {
   if (!creatorKey) return false;
-  await ensureSchema();
-  const result = await bindings().DB.prepare("SELECT admin_hash AS adminHash FROM menus WHERE id = ?")
-    .bind(menuId)
-    .first<{ adminHash: string }>();
-  return Boolean(result && result.adminHash === (await hashSecret(creatorKey)));
+  const database = await readDatabase();
+  const menu = database.menus.find((entry) => entry.id === menuId);
+  return Boolean(menu && menu.adminHash === hashSecret(creatorKey));
 }
 
 export function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status });
+}
+
+const allowedImageTypes = new Map([
+  ["image/png", "png"],
+  ["image/jpeg", "jpg"],
+  ["image/webp", "webp"],
+]);
+
+export async function saveImage(file: File, category: "menu" | "proof") {
+  const extension = allowedImageTypes.get(file.type);
+  if (!extension) throw new Error("Use a PNG, JPG, or WebP image.");
+  if (file.size > 5 * 1024 * 1024) throw new Error("The image must be smaller than 5 MB.");
+  await ensureDataDirectory();
+  const fileName = `${category}-${randomUUID()}.${extension}`;
+  await writeFile(path.join(uploadDirectory, fileName), Buffer.from(await file.arrayBuffer()));
+  return {
+    fileName,
+    mimeType: file.type,
+    publicUrl: category === "menu" ? `/api/uploads/${fileName}` : null,
+  };
+}
+
+export async function readUpload(fileName: string) {
+  if (path.basename(fileName) !== fileName) return null;
+  try {
+    return await readFile(path.join(uploadDirectory, fileName));
+  } catch {
+    return null;
+  }
+}
+
+export async function removeUpload(fileNameOrUrl: string | null) {
+  if (!fileNameOrUrl) return;
+  const fileName = fileNameOrUrl.split("/").pop();
+  if (!fileName || path.basename(fileName) !== fileName) return;
+  try {
+    await unlink(path.join(uploadDirectory, fileName));
+  } catch {
+    // An already-missing orphan is harmless.
+  }
 }
