@@ -536,6 +536,7 @@ input:focus, textarea:focus { border-color: #aaa69c; box-shadow: 0 0 0 3px rgba(
 .done-state h2 { margin-bottom: 10px; }
 .done-state p { color: var(--muted); line-height: 1.6; }
 .back-to-menu { margin-top: 18px; }
+.cancel-order-button { width: 100%; margin-top: 12px; }
 
 .manage { width: min(100%, 900px); }
 .manage-heading {
@@ -792,6 +793,31 @@ input:focus, textarea:focus { border-color: #aaa69c; box-shadow: 0 0 0 3px rgba(
   outline: 3px solid rgba(232, 93, 63, .4);
   outline-offset: 2px;
 }
+
+.cancel-dialog {
+  position: fixed;
+  z-index: 110;
+  inset: 0;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 20, 18, .52);
+  backdrop-filter: blur(4px);
+}
+.cancel-dialog-card {
+  width: min(100%, 430px);
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, .2);
+}
+.cancel-dialog-card h2 { margin: 9px 0 8px; font-size: 28px; }
+.cancel-dialog-card > p:not(.eyebrow) { margin: 0; color: var(--muted); line-height: 1.55; }
+.cancel-dialog-actions { margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px; }
+.cancel-dialog-actions button { width: auto; }
+.danger-button { background: var(--accent); border-color: var(--accent); }
+.danger-button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
 
 footer {
   height: 66px;

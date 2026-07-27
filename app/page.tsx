@@ -95,6 +95,50 @@ function ImageLightbox({ image, onClose }: { image: PreviewImage; onClose: () =>
   );
 }
 
+function CancelOrderDialog({
+  open,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose, open]);
+
+  if (!open) return null;
+  return (
+    <div
+      className="cancel-dialog"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="cancel-dialog-card" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title" aria-describedby="cancel-order-description">
+        <p className="eyebrow">Checkout</p>
+        <h2 id="cancel-order-title">Cancel this order?</h2>
+        <p id="cancel-order-description">Your order will be removed from the list. You can place a new order later.</p>
+        <div className="cancel-dialog-actions">
+          <button type="button" className="outline-button" onClick={onClose} autoFocus>Keep order</button>
+          <button type="button" className="secondary danger-button" onClick={onConfirm}>Cancel order</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderList({
   orders,
   creator = false,
@@ -194,6 +238,7 @@ export default function Home() {
   const [proof, setProof] = useState<File | null>(null);
   const [creatorKey, setCreatorKey] = useState("");
   const [proofSubmitted, setProofSubmitted] = useState(false);
+  const [cancelPromptOpen, setCancelPromptOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [shareFallback, setShareFallback] = useState("");
   const [previewImage, setPreviewImage] = useState<PreviewImage>(null);
@@ -247,6 +292,45 @@ export default function Home() {
       });
     }
   }, [loadMenu]);
+
+  const cancelOrder = useCallback(async () => {
+    if (!menu || !orderId) return;
+    const menuId = menu.id;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || "Could not cancel this order.");
+      setOrderId("");
+      setProof(null);
+      setProofSubmitted(false);
+      setCustomerName("");
+      setSellerNote("");
+      setQuantities({});
+      setView("menu");
+      window.history.replaceState(null, "", `/?menu=${menuId}`);
+      await loadMenu(menuId);
+      setNotice("Order cancelled.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not cancel this order.");
+    } finally {
+      setLoading(false);
+    }
+  }, [loadMenu, menu, orderId]);
+
+  const openCancelPrompt = useCallback(() => setCancelPromptOpen(true), []);
+
+  useEffect(() => {
+    if (view !== "checkout" || proofSubmitted || !menu || !orderId) return;
+    const checkoutUrl = `/?menu=${menu.id}&checkout=${orderId}`;
+    const handleBack = () => {
+      window.history.pushState(null, "", checkoutUrl);
+      openCancelPrompt();
+    };
+    window.addEventListener("popstate", handleBack);
+    return () => window.removeEventListener("popstate", handleBack);
+  }, [menu, openCancelPrompt, orderId, proofSubmitted, view]);
 
   const proofPreview = useMemo(() => (proof ? URL.createObjectURL(proof) : ""), [proof]);
 
@@ -810,6 +894,9 @@ export default function Home() {
                   />
                 </label>
                 <button className="primary" disabled={loading || !proof}>{loading ? "Uploading…" : "Submit payment proof"}</button>
+                <button type="button" className="outline-button cancel-order-button" disabled={loading} onClick={openCancelPrompt}>
+                  Cancel order
+                </button>
               </form>
             )}
           </div>
@@ -883,6 +970,14 @@ export default function Home() {
         {loading && !menu && view !== "create" ? <div className="loading">Loading menu…</div> : null}
       </section>
       <ImageLightbox image={previewImage} onClose={() => setPreviewImage(null)} />
+      <CancelOrderDialog
+        open={cancelPromptOpen}
+        onClose={() => setCancelPromptOpen(false)}
+        onConfirm={() => {
+          setCancelPromptOpen(false);
+          void cancelOrder();
+        }}
+      />
       <footer>Small orders, beautifully organized.</footer>
     </main>
   );
