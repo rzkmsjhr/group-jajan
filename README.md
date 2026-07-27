@@ -47,3 +47,8 @@ The API applies per-IP rate limits to menu creation, menu edits, orders,
 payment-proof uploads, cancellations, and creator controls. Cloudflare Worker
 Rate Limiting bindings are used in production; local development falls back to
 an in-process limiter.
+
+Uploaded images are checked on the server using their binary signatures and are
+accepted only as PNG, JPEG, or WebP files. The app also sends browser security
+headers, including a content security policy, MIME sniffing protection, and
+HTTPS-only transport protection.

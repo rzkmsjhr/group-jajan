@@ -228,28 +228,44 @@ export function enforceBodyLimit(request: Request, maxBytes: number) {
   return null;
 }
 
-const allowedImageTypes = new Map([
-  ["image/png", "png"],
-  ["image/jpeg", "jpg"],
-  ["image/webp", "webp"],
-]);
 const maxImageSizeBytes = 4 * 1024 * 1024;
+
+type DetectedImage = { mimeType: "image/png" | "image/jpeg" | "image/webp"; extension: "png" | "jpg" | "webp" };
+
+function hasBytes(bytes: Uint8Array, expected: number[], offset = 0) {
+  return expected.every((value, index) => bytes[offset + index] === value);
+}
+
+function detectImage(bytes: Uint8Array): DetectedImage | null {
+  if (hasBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+    return { mimeType: "image/png", extension: "png" };
+  }
+  if (hasBytes(bytes, [0xff, 0xd8, 0xff])) {
+    return { mimeType: "image/jpeg", extension: "jpg" };
+  }
+  if (hasBytes(bytes, [0x52, 0x49, 0x46, 0x46]) && hasBytes(bytes, [0x57, 0x45, 0x42, 0x50], 8)) {
+    return { mimeType: "image/webp", extension: "webp" };
+  }
+  return null;
+}
 
 function safeUploadName(fileName: string) {
   return /^[a-z]+-[0-9a-f-]+\.(png|jpg|webp)$/.test(fileName);
 }
 
 export async function saveImage(file: File, category: "menu" | "proof") {
-  const extension = allowedImageTypes.get(file.type);
-  if (!extension) throw new Error("Use a PNG, JPG, or WebP image.");
   if (file.size > maxImageSizeBytes) throw new Error("Each image must be 4 MB or smaller.");
+  const contents = await file.arrayBuffer();
+  const detectedImage = detectImage(new Uint8Array(contents));
+  if (!detectedImage) throw new Error("The uploaded file is not a valid PNG, JPG, or WebP image.");
+  const { extension, mimeType } = detectedImage;
   const fileName = `${category}-${randomUUID()}.${extension}`;
-  await getBindings().UPLOADS.put(fileName, await file.arrayBuffer(), {
-    httpMetadata: { contentType: file.type },
+  await getBindings().UPLOADS.put(fileName, contents, {
+    httpMetadata: { contentType: mimeType },
   });
   return {
     fileName,
-    mimeType: file.type,
+    mimeType,
     publicUrl: category === "menu" ? `/api/uploads/${fileName}` : null,
   };
 }
