@@ -41,6 +41,7 @@ type DraftItem = {
   imageFile?: File | null;
 };
 type View = "home" | "create" | "menu" | "checkout" | "manage";
+const maxImageSizeBytes = 4 * 1024 * 1024;
 
 const money = new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -276,6 +277,16 @@ export default function Home() {
     setDraftItems((current) =>
       current.map((item, itemIndex) => (itemIndex === index ? { ...item, imageFile: file } : item)),
     );
+  }
+
+  function validateSelectedImage(file: File | null, input: HTMLInputElement) {
+    if (file && file.size > maxImageSizeBytes) {
+      input.value = "";
+      setError("Each image must be 4 MB or smaller.");
+      return undefined;
+    }
+    setError("");
+    return file;
   }
 
   function buildMenuFormData() {
@@ -572,8 +583,15 @@ export default function Home() {
                 ) : item.imageUrl && brokenEditImages.includes(item.imageUrl) ? (
                   <span className="image-placeholder broken-image-placeholder">!</span>
                 ) : <span className="image-placeholder">＋</span>}
-                <span>{item.imageFile?.name || (item.imageUrl ? "Change image" : "Add image")} <small>optional</small></span>
-                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => updateDraftImage(index, event.target.files?.[0] || null)} />
+                <span>{item.imageFile?.name || (item.imageUrl ? "Change image" : "Add image")} <small>optional · max 4 MB</small></span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(event) => {
+                    const file = validateSelectedImage(event.currentTarget.files?.[0] || null, event.currentTarget);
+                    if (file !== undefined) updateDraftImage(index, file);
+                  }}
+                />
               </label>
               {item.imageUrl ? (
                 <button type="button" className="remove-image" onClick={() => setDraftItems((items) => items.map((entry, itemIndex) => itemIndex === index ? { ...entry, imageUrl: null, imageFile: null } : entry))}>Remove image</button>
@@ -590,7 +608,7 @@ export default function Home() {
           <textarea maxLength={500} value={paymentInstructions} onChange={(event) => setPaymentInstructions(event.target.value)} placeholder="Bank name and transfer details" />
         </label>
         <label className="payment-image-field">
-          <span>Payment instruction image <small>optional</small></span>
+          <span>Payment instruction image <small>optional · max 4 MB</small></span>
           {paymentImageUrl && !paymentImageFile && !brokenEditImages.includes(paymentImageUrl) ? (
             <img
               src={editPreviewUrl(paymentImageUrl)}
@@ -603,7 +621,14 @@ export default function Home() {
           <span className="payment-image-action">
             {paymentImageFile?.name || (paymentImageUrl ? "Change image" : "Choose an image")}
           </span>
-          <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setPaymentImageFile(event.target.files?.[0] || null)} />
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(event) => {
+              const file = validateSelectedImage(event.currentTarget.files?.[0] || null, event.currentTarget);
+              if (file !== undefined) setPaymentImageFile(file);
+            }}
+          />
         </label>
         {paymentImageUrl || paymentImageFile ? (
           <button
@@ -773,8 +798,16 @@ export default function Home() {
                 <label className={`upload ${proofPreview ? "has-preview" : ""}`}>
                   {proofPreview ? <img src={proofPreview} alt="Selected payment proof" /> : <span className="upload-icon">↑</span>}
                   <span>{proof ? proof.name : "Choose an image"}</span>
-                  <small>PNG, JPG or WebP · max 5 MB</small>
-                  <input required type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => setProof(e.target.files?.[0] || null)} />
+                  <small>PNG, JPG or WebP · max 4 MB</small>
+                  <input
+                    required
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(event) => {
+                      const file = validateSelectedImage(event.currentTarget.files?.[0] || null, event.currentTarget);
+                      if (file !== undefined) setProof(file);
+                    }}
+                  />
                 </label>
                 <button className="primary" disabled={loading || !proof}>{loading ? "Uploading…" : "Submit payment proof"}</button>
               </form>

@@ -151,6 +151,7 @@ const allowedImageTypes = new Map([
   ["image/jpeg", "jpg"],
   ["image/webp", "webp"],
 ]);
+const maxImageSizeBytes = 4 * 1024 * 1024;
 
 function safeUploadName(fileName: string) {
   return /^[a-z]+-[0-9a-f-]+\.(png|jpg|webp)$/.test(fileName);
@@ -159,7 +160,7 @@ function safeUploadName(fileName: string) {
 export async function saveImage(file: File, category: "menu" | "proof") {
   const extension = allowedImageTypes.get(file.type);
   if (!extension) throw new Error("Use a PNG, JPG, or WebP image.");
-  if (file.size > 5 * 1024 * 1024) throw new Error("The image must be smaller than 5 MB.");
+  if (file.size > maxImageSizeBytes) throw new Error("Each image must be 4 MB or smaller.");
   const fileName = `${category}-${randomUUID()}.${extension}`;
   await getBindings().UPLOADS.put(fileName, await file.arrayBuffer(), {
     httpMetadata: { contentType: file.type },
