@@ -735,9 +735,26 @@ input:focus, textarea:focus { border-color: #aaa69c; box-shadow: 0 0 0 3px rgba(
   font-size: 13px;
   font-weight: 700;
   box-shadow: 0 8px 30px rgba(0,0,0,.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .message.error { border-color: #eab6a9; color: #9a351f; }
 .message.success { border-color: #add4bd; color: var(--green); }
+.message-close {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+}
+.message-close:hover { background: rgba(40, 122, 84, .1); }
 .loading { text-align: center; color: var(--muted); }
 
 .lightbox {

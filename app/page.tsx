@@ -280,6 +280,12 @@ export default function Home() {
   const [editImageVersion, setEditImageVersion] = useState(0);
   const [brokenEditImages, setBrokenEditImages] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (!notice) return;
+    const dismissTimer = window.setTimeout(() => setNotice(""), 15_000);
+    return () => window.clearTimeout(dismissTimer);
+  }, [notice]);
+
   const loadMenu = useCallback(async (menuId: string, manage = false) => {
     setLoading(true);
     setError("");
@@ -800,7 +806,12 @@ export default function Home() {
 
       <section className="shell">
         {error ? <div className="message error" role="alert">{error}</div> : null}
-        {notice ? <div className="message success">{notice}</div> : null}
+        {notice ? (
+          <div className="message success" role="status" aria-live="polite">
+            <span>{notice}</span>
+            <button type="button" className="message-close" onClick={() => setNotice("")} aria-label="Dismiss notification">×</button>
+          </div>
+        ) : null}
 
         {view === "home" ? (
           <div className="hero">
