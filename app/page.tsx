@@ -186,6 +186,8 @@ function OrderList({
   onToggle?: (order: Order) => void;
   onPreview?: (image: Exclude<PreviewImage, null>) => void;
 }) {
+  const grandTotalCents = orders.reduce((total, order) => total + order.totalCents, 0);
+
   return (
     <div className={`order-list ${creator ? "" : "public-orders"}`}>
       <div className="list-heading">
@@ -193,7 +195,12 @@ function OrderList({
           <p className="eyebrow">{creator ? "Order list" : "Who has ordered"}</p>
           <h2>{orders.length} order{orders.length === 1 ? "" : "s"}</h2>
         </div>
-        {!creator ? <span>Visible to everyone</span> : null}
+        {creator ? (
+          <div className="order-summary">
+            <span>Grand total</span>
+            <strong> {formatMoney(grandTotalCents)}</strong>
+          </div>
+        ) : <span>Visible to everyone</span>}
       </div>
       {!orders.length ? (
         <div className="empty">
