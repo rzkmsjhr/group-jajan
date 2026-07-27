@@ -42,6 +42,8 @@ type DraftItem = {
 };
 type View = "home" | "create" | "menu" | "checkout" | "manage";
 const maxImageSizeBytes = 4 * 1024 * 1024;
+const maxImageDimension = 1600;
+const imageCompressionQuality = 0.84;
 
 const money = new Intl.NumberFormat("id-ID", {
   style: "currency",
@@ -52,6 +54,38 @@ const money = new Intl.NumberFormat("id-ID", {
 
 function formatMoney(cents: number) {
   return money.format(cents / 100);
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+  return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+async function compressImage(file: File) {
+  if (!file.type.startsWith("image/") || typeof createImageBitmap !== "function") return file;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch {
+    return file;
+  }
+  try {
+    if (file.size <= 750 * 1024 && bitmap.width <= maxImageDimension && bitmap.height <= maxImageDimension) {
+      return file;
+    }
+    const scale = Math.min(1, maxImageDimension / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await canvasToBlob(canvas, "image/webp", imageCompressionQuality);
+    if (!blob || blob.size >= file.size) return file;
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "image";
+    return new File([blob], `${baseName}.webp`, { type: "image/webp", lastModified: file.lastModified });
+  } finally {
+    bitmap.close();
+  }
 }
 
 function creatorKeyName(menuId: string) {
@@ -239,6 +273,7 @@ export default function Home() {
   const [creatorKey, setCreatorKey] = useState("");
   const [proofSubmitted, setProofSubmitted] = useState(false);
   const [cancelPromptOpen, setCancelPromptOpen] = useState(false);
+  const [imageProcessing, setImageProcessing] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [shareFallback, setShareFallback] = useState("");
   const [previewImage, setPreviewImage] = useState<PreviewImage>(null);
@@ -363,14 +398,21 @@ export default function Home() {
     );
   }
 
-  function validateSelectedImage(file: File | null, input: HTMLInputElement) {
-    if (file && file.size > maxImageSizeBytes) {
-      input.value = "";
-      setError("Each image must be 4 MB or smaller.");
-      return undefined;
-    }
+  async function prepareSelectedImage(file: File | null, input: HTMLInputElement) {
+    if (!file) return null;
+    setImageProcessing(true);
     setError("");
-    return file;
+    try {
+      const compressedFile = await compressImage(file);
+      if (compressedFile.size > maxImageSizeBytes) {
+        input.value = "";
+        setError("Each image must be 4 MB or smaller, even after compression.");
+        return undefined;
+      }
+      return compressedFile;
+    } finally {
+      setImageProcessing(false);
+    }
   }
 
   function buildMenuFormData() {
@@ -672,9 +714,12 @@ export default function Home() {
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   onChange={(event) => {
-                    const file = validateSelectedImage(event.currentTarget.files?.[0] || null, event.currentTarget);
-                    if (file !== undefined) updateDraftImage(index, file);
+                    const input = event.currentTarget;
+                    void prepareSelectedImage(input.files?.[0] || null, input).then((file) => {
+                      if (file !== undefined) updateDraftImage(index, file);
+                    });
                   }}
+                  disabled={imageProcessing}
                 />
               </label>
               {item.imageUrl ? (
@@ -709,9 +754,12 @@ export default function Home() {
             type="file"
             accept="image/png,image/jpeg,image/webp"
             onChange={(event) => {
-              const file = validateSelectedImage(event.currentTarget.files?.[0] || null, event.currentTarget);
-              if (file !== undefined) setPaymentImageFile(file);
+              const input = event.currentTarget;
+              void prepareSelectedImage(input.files?.[0] || null, input).then((file) => {
+                if (file !== undefined) setPaymentImageFile(file);
+              });
             }}
+            disabled={imageProcessing}
           />
         </label>
         {paymentImageUrl || paymentImageFile ? (
@@ -780,7 +828,7 @@ export default function Home() {
               <h1>What’s on the table?</h1>
             </div>
             {menuFields()}
-            <button className="primary" disabled={loading}>{loading ? "Creating…" : "Create & share"}</button>
+            <button className="primary" disabled={loading || imageProcessing}>{imageProcessing ? "Optimizing image…" : loading ? "Creating…" : "Create & share"}</button>
           </form>
         ) : null}
 
@@ -888,12 +936,15 @@ export default function Home() {
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     onChange={(event) => {
-                      const file = validateSelectedImage(event.currentTarget.files?.[0] || null, event.currentTarget);
-                      if (file !== undefined) setProof(file);
+                      const input = event.currentTarget;
+                      void prepareSelectedImage(input.files?.[0] || null, input).then((file) => {
+                        if (file !== undefined) setProof(file);
+                      });
                     }}
+                    disabled={imageProcessing}
                   />
                 </label>
-                <button className="primary" disabled={loading || !proof}>{loading ? "Uploading…" : "Submit payment proof"}</button>
+                <button className="primary" disabled={loading || imageProcessing || !proof}>{imageProcessing ? "Optimizing image…" : loading ? "Uploading…" : "Submit payment proof"}</button>
                 <button type="button" className="outline-button cancel-order-button" disabled={loading} onClick={openCancelPrompt}>
                   Cancel order
                 </button>
@@ -912,7 +963,7 @@ export default function Home() {
                   <h1>Keep it fresh.</h1>
                 </div>
                 {menuFields()}
-                <button className="primary" disabled={loading}>{loading ? "Saving…" : "Save menu changes"}</button>
+                <button className="primary" disabled={loading || imageProcessing}>{imageProcessing ? "Optimizing image…" : loading ? "Saving…" : "Save menu changes"}</button>
               </form>
             ) : (
               <>
