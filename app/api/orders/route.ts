@@ -1,8 +1,12 @@
-import { cleanText, jsonError, readDatabase, updateDatabase } from "@/lib/data";
+import { cleanText, enforceBodyLimit, enforceRateLimit, jsonError, readDatabase, updateDatabase } from "@/lib/data";
 import { randomUUID } from "node:crypto";
 
 export async function POST(request: Request) {
   try {
+    const rateLimitResponse = await enforceRateLimit(request, "order-create");
+    if (rateLimitResponse) return rateLimitResponse;
+    const bodyLimitResponse = enforceBodyLimit(request, 128 * 1024);
+    if (bodyLimitResponse) return bodyLimitResponse;
     const body = await request.json() as {
       menuId?: unknown;
       customerName?: unknown;

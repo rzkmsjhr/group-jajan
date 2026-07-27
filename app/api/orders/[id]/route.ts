@@ -1,7 +1,9 @@
-import { jsonError, removeUpload, updateDatabase } from "@/lib/data";
+import { enforceRateLimit, jsonError, removeUpload, updateDatabase } from "@/lib/data";
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const rateLimitResponse = await enforceRateLimit(_request, "order-cancel");
+    if (rateLimitResponse) return rateLimitResponse;
     const { id } = await context.params;
     const removedOrder = await updateDatabase((database) => {
       const index = database.orders.findIndex((entry) => entry.id === id);

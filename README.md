@@ -40,3 +40,10 @@ That directory is intentionally ignored by Git. Back it up if the order history
 must be retained.
 
 Set `TINYTABLE_DATA_DIR` before starting the server to store data elsewhere.
+
+## Abuse protection
+
+The API applies per-IP rate limits to menu creation, menu edits, orders,
+payment-proof uploads, cancellations, and creator controls. Cloudflare Worker
+Rate Limiting bindings are used in production; local development falls back to
+an in-process limiter.

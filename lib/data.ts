@@ -1,5 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import type { D1Database, R2Bucket } from "@cloudflare/workers-types";
+import type { D1Database, R2Bucket, RateLimit } from "@cloudflare/workers-types";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createAppStateTableSql, seedAppStateSql } from "@/db/schema";
 
@@ -51,11 +51,85 @@ type Bindings = {
   UPLOADS: R2Bucket;
 };
 
+type RateLimitBucket =
+  | "menu-create"
+  | "menu-update"
+  | "order-create"
+  | "order-cancel"
+  | "proof-upload"
+  | "status-update"
+  | "visibility-update";
+
+const rateLimitBindings: Record<RateLimitBucket, string> = {
+  "menu-create": "MENU_CREATE_LIMITER",
+  "menu-update": "MENU_UPDATE_LIMITER",
+  "order-create": "ORDER_CREATE_LIMITER",
+  "order-cancel": "ORDER_CANCEL_LIMITER",
+  "proof-upload": "PROOF_UPLOAD_LIMITER",
+  "status-update": "STATUS_UPDATE_LIMITER",
+  "visibility-update": "VISIBILITY_UPDATE_LIMITER",
+};
+
+const localRateLimitPolicies: Record<RateLimitBucket, { limit: number; periodMs: number }> = {
+  "menu-create": { limit: 10, periodMs: 60_000 },
+  "menu-update": { limit: 20, periodMs: 60_000 },
+  "order-create": { limit: 2, periodMs: 60_000 },
+  "order-cancel": { limit: 5, periodMs: 60_000 },
+  "proof-upload": { limit: 5, periodMs: 60_000 },
+  "status-update": { limit: 30, periodMs: 60_000 },
+  "visibility-update": { limit: 20, periodMs: 60_000 },
+};
+const localRateLimitState = new Map<string, { count: number; resetAt: number }>();
+
 const emptyDatabase: Database = { menus: [], orders: [] };
 let schemaReady: Promise<void> | null = null;
 
 function getBindings() {
   return getCloudflareContext().env as unknown as Bindings;
+}
+
+function clientAddress(request: Request) {
+  const cloudflareAddress = request.headers.get("cf-connecting-ip");
+  if (cloudflareAddress) return cloudflareAddress.slice(0, 128);
+  const forwardedAddress = request.headers.get("x-forwarded-for")?.split(",")[0].trim();
+  return (forwardedAddress || "local").slice(0, 128);
+}
+
+function tooManyRequests() {
+  return Response.json(
+    { error: "Too many requests. Please try again in a minute." },
+    { status: 429, headers: { "cache-control": "no-store", "retry-after": "60" } },
+  );
+}
+
+export async function enforceRateLimit(request: Request, bucket: RateLimitBucket) {
+  const key = `${bucket}:${clientAddress(request)}`;
+  let binding: RateLimit | undefined;
+  try {
+    const bindings = getBindings() as unknown as Record<string, RateLimit | undefined>;
+    binding = bindings[rateLimitBindings[bucket]];
+  } catch {
+    // Next.js local development does not provide Cloudflare bindings.
+  }
+  if (binding) {
+    try {
+      const outcome = await binding.limit({ key });
+      return outcome.success ? null : tooManyRequests();
+    } catch {
+      // Fall back to the local limiter if the binding is unavailable.
+    }
+  }
+
+  const policy = localRateLimitPolicies[bucket];
+  const now = Date.now();
+  const current = localRateLimitState.get(key);
+  if (!current || current.resetAt <= now) {
+    localRateLimitState.set(key, { count: 1, resetAt: now + policy.periodMs });
+    return null;
+  }
+  if (current.count >= policy.limit) return tooManyRequests();
+  current.count += 1;
+  return null;
 }
 
 async function ensureDatabase(database: D1Database) {
@@ -144,6 +218,14 @@ export async function verifyCreator(menuId: string, creatorKey: string | null) {
 
 export function jsonError(message: string, status = 400) {
   return Response.json({ error: message }, { status });
+}
+
+export function enforceBodyLimit(request: Request, maxBytes: number) {
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    return jsonError("This request is too large.", 413);
+  }
+  return null;
 }
 
 const allowedImageTypes = new Map([

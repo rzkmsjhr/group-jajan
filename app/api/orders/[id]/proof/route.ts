@@ -1,5 +1,7 @@
 import {
   jsonError,
+  enforceBodyLimit,
+  enforceRateLimit,
   readDatabase,
   readUpload,
   removeUpload,
@@ -10,6 +12,10 @@ import {
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const rateLimitResponse = await enforceRateLimit(request, "proof-upload");
+    if (rateLimitResponse) return rateLimitResponse;
+    const bodyLimitResponse = enforceBodyLimit(request, 5 * 1024 * 1024);
+    if (bodyLimitResponse) return bodyLimitResponse;
     const { id } = await context.params;
     const form = await request.formData();
     const proof = form.get("proof");

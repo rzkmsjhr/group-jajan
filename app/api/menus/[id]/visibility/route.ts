@@ -1,6 +1,8 @@
-import { jsonError, updateDatabase, verifyCreator } from "@/lib/data";
+import { enforceRateLimit, jsonError, updateDatabase, verifyCreator } from "@/lib/data";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const rateLimitResponse = await enforceRateLimit(request, "visibility-update");
+  if (rateLimitResponse) return rateLimitResponse;
   const { id } = await context.params;
   if (!(await verifyCreator(id, request.headers.get("x-creator-key")))) {
     return jsonError("Creator access required.", 403);

@@ -1,5 +1,7 @@
 import {
   cleanText,
+  enforceBodyLimit,
+  enforceRateLimit,
   hashSecret,
   jsonError,
   MenuItemRecord,
@@ -17,6 +19,10 @@ type ItemPayload = {
 
 export async function POST(request: Request) {
   try {
+    const rateLimitResponse = await enforceRateLimit(request, "menu-create");
+    if (rateLimitResponse) return rateLimitResponse;
+    const bodyLimitResponse = enforceBodyLimit(request, 25 * 1024 * 1024);
+    if (bodyLimitResponse) return bodyLimitResponse;
     const form = await request.formData();
     const payloadValue = form.get("payload");
     if (typeof payloadValue !== "string") return jsonError("Menu details are missing.");

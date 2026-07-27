@@ -1,6 +1,8 @@
-import { jsonError, readDatabase, updateDatabase, verifyCreator } from "@/lib/data";
+import { enforceRateLimit, jsonError, readDatabase, updateDatabase, verifyCreator } from "@/lib/data";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  const rateLimitResponse = await enforceRateLimit(request, "status-update");
+  if (rateLimitResponse) return rateLimitResponse;
   const { id } = await context.params;
   const body = await request.json() as { status?: unknown };
   if (body.status !== "paid" && body.status !== "unpaid") return jsonError("Invalid payment status.");

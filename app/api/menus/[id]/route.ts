@@ -1,5 +1,7 @@
 import {
   cleanText,
+  enforceBodyLimit,
+  enforceRateLimit,
   jsonError,
   MenuItemRecord,
   readDatabase,
@@ -58,6 +60,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
+    const rateLimitResponse = await enforceRateLimit(request, "menu-update");
+    if (rateLimitResponse) return rateLimitResponse;
+    const bodyLimitResponse = enforceBodyLimit(request, 25 * 1024 * 1024);
+    if (bodyLimitResponse) return bodyLimitResponse;
     const { id } = await context.params;
     if (!(await verifyCreator(id, request.headers.get("x-creator-key")))) {
       return jsonError("Creator access required.", 403);
