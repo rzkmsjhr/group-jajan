@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { Language, getTranslation, translateError, translations } from "@/lib/i18n";
 
 type Item = {
   id: string;
@@ -133,11 +134,14 @@ function CancelOrderDialog({
   open,
   onClose,
   onConfirm,
+  lang,
 }: {
   open: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  lang: Language;
 }) {
+  const t = (key: keyof typeof translations.en) => getTranslation(lang, key);
   useEffect(() => {
     if (!open) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -161,12 +165,12 @@ function CancelOrderDialog({
       }}
     >
       <div className="cancel-dialog-card" role="dialog" aria-modal="true" aria-labelledby="cancel-order-title" aria-describedby="cancel-order-description">
-        <p className="eyebrow">Checkout</p>
-        <h2 id="cancel-order-title">Cancel this order?</h2>
-        <p id="cancel-order-description">Your order will be removed from the list. You can place a new order later.</p>
+        <p className="eyebrow">{t("checkout")}</p>
+        <h2 id="cancel-order-title">{t("cancelThisOrder")}</h2>
+        <p id="cancel-order-description">{t("cancelOrderDescription")}</p>
         <div className="cancel-dialog-actions">
-          <button type="button" className="outline-button" onClick={onClose} autoFocus>Keep order</button>
-          <button type="button" className="secondary danger-button" onClick={onConfirm}>Cancel order</button>
+          <button type="button" className="outline-button" onClick={onClose} autoFocus>{t("keepOrder")}</button>
+          <button type="button" className="secondary danger-button" onClick={onConfirm}>{t("cancelOrder")}</button>
         </div>
       </div>
     </div>
@@ -177,36 +181,39 @@ function OrderList({
   orders,
   creator = false,
   creatorKey = "",
+  lang,
   onToggle,
   onPreview,
 }: {
   orders: Order[];
   creator?: boolean;
   creatorKey?: string;
+  lang: Language;
   onToggle?: (order: Order) => void;
   onPreview?: (image: Exclude<PreviewImage, null>) => void;
 }) {
+  const t = (key: keyof typeof translations.en) => getTranslation(lang, key);
   const grandTotalCents = orders.reduce((total, order) => total + order.totalCents, 0);
 
   return (
     <div className={`order-list ${creator ? "" : "public-orders"}`}>
       <div className="list-heading">
         <div>
-          <p className="eyebrow">{creator ? "Order list" : "Who has ordered"}</p>
-          <h2>{orders.length} order{orders.length === 1 ? "" : "s"}</h2>
+          <p className="eyebrow">{creator ? t("orderList") : t("whoHasOrdered")}</p>
+          <h2>{translations[lang].orderCount(orders.length)}</h2>
         </div>
         {creator ? (
           <div className="order-summary">
-            <span>Grand total</span>
+            <span>{t("grandTotal")}</span>
             <strong> {formatMoney(grandTotalCents)}</strong>
           </div>
-        ) : <span>Visible to everyone</span>}
+        ) : <span>{t("visibleToEveryone")}</span>}
       </div>
       {!orders.length ? (
         <div className="empty">
           <span>○</span>
-          <h2>No orders yet</h2>
-          <p>The first order will appear here.</p>
+          <h2>{t("noOrdersYet")}</h2>
+          <p>{t("firstOrderAppearsHere")}</p>
         </div>
       ) : orders.map((order) => (
         <article className="order-row" key={order.id}>
@@ -232,24 +239,24 @@ function OrderList({
                     alt: `Payment proof from ${order.customerName}`,
                   })}
                 >
-                  View proof
+                  {t("viewProof")}
                 </button>
-              ) : <span className="no-proof">No proof</span>
+              ) : <span className="no-proof">{t("noProof")}</span>
             ) : null}
             {creator ? (
               <button
                 type="button"
                 role="switch"
                 aria-checked={order.status === "paid"}
-                aria-label={`Mark ${order.customerName} as ${order.status === "paid" ? "unpaid" : "paid"}`}
+                aria-label={`Toggle payment status for ${order.customerName}`}
                 className={`payment-switch ${order.status}`}
                 onClick={() => onToggle?.(order)}
               >
                 <span className="switch-track" aria-hidden="true"><span /></span>
-                <span>{order.status === "paid" ? "Paid" : "Unpaid"}</span>
+                <span>{order.status === "paid" ? t("paid") : t("unpaid")}</span>
               </button>
             ) : (
-              <span className={`status ${order.status}`}><i /> {order.status === "paid" ? "Paid" : "Unpaid"}</span>
+              <span className={`status ${order.status}`}><i /> {order.status === "paid" ? t("paid") : t("unpaid")}</span>
             )}
           </div>
         </article>
@@ -259,6 +266,8 @@ function OrderList({
 }
 
 export default function Home() {
+  const [lang, setLang] = useState<Language>("id");
+  const t = (key: keyof typeof translations.en) => getTranslation(lang, key);
   const [view, setView] = useState<View>("home");
   const [menu, setMenu] = useState<Menu | null>(null);
   const [loading, setLoading] = useState(false);
@@ -293,6 +302,34 @@ export default function Home() {
     return () => window.clearTimeout(dismissTimer);
   }, [notice]);
 
+  useEffect(() => {
+    const hasUnsavedWork =
+      view === "create" ||
+      (view === "manage" && editMode) ||
+      (view === "menu" && Object.keys(quantities).some((k) => quantities[k] > 0)) ||
+      (view === "checkout" && !proofSubmitted);
+
+    if (!hasUnsavedWork) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [view, quantities, proofSubmitted, editMode]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("mi-jajan-lang") as Language;
+    if (saved === "en" || saved === "id") setLang(saved);
+  }, []);
+
+  const changeLang = (newLang: Language) => {
+    setLang(newLang);
+    localStorage.setItem("mi-jajan-lang", newLang);
+  };
+
   const loadMenu = useCallback(async (menuId: string, manage = false) => {
     setLoading(true);
     setError("");
@@ -315,11 +352,11 @@ export default function Home() {
         headers,
       });
       const data = (await response.json()) as Menu & { error?: string };
-      if (!response.ok) throw new Error(data.error || "Could not load this menu.");
+      if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : t("somethingWentWrong"));
       setMenu(data);
       setView(manage ? "manage" : "menu");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something went wrong.");
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
     } finally {
       setLoading(false);
     }
@@ -349,7 +386,7 @@ export default function Home() {
     try {
       const response = await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
       const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error || "Could not cancel this order.");
+      if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not cancel this order."));
       setOrderId("");
       setProof(null);
       setProofSubmitted(false);
@@ -359,9 +396,9 @@ export default function Home() {
       setView("menu");
       window.history.replaceState(null, "", `/?menu=${menuId}`);
       await loadMenu(menuId);
-      setNotice("Order cancelled.");
+      setNotice(t("orderCancelled"));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not cancel this order.");
+      setError(cause instanceof Error ? cause.message : translateError(lang, "Could not cancel this order."));
     } finally {
       setLoading(false);
     }
@@ -419,7 +456,7 @@ export default function Home() {
       const compressedFile = await compressImage(file);
       if (compressedFile.size > maxImageSizeBytes) {
         input.value = "";
-        setError("Each image must be 4 MB or smaller, even after compression.");
+        setError(t("imageSizeError"));
         return undefined;
       }
       return compressedFile;
@@ -461,16 +498,16 @@ export default function Home() {
       });
       const data = (await response.json()) as { menu?: Menu; creatorKey?: string; error?: string };
       if (!response.ok || !data.menu || !data.creatorKey) {
-        throw new Error(data.error || "Could not create the menu.");
+        throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not create the menu."));
       }
       localStorage.setItem(creatorKeyName(data.menu.id), data.creatorKey);
       setCreatorKey(data.creatorKey);
       setMenu(data.menu);
       setView("manage");
       setRoute(`/?menu=${data.menu.id}&manage=1`);
-      setNotice("Your menu is live. Copy the order link and share it.");
+      setNotice(t("menuLive"));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something went wrong.");
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
     } finally {
       setLoading(false);
     }
@@ -491,14 +528,14 @@ export default function Home() {
         body: JSON.stringify({ menuId: menu.id, customerName, sellerNote, selections }),
       });
       const data = (await response.json()) as { orderId?: string; error?: string };
-      if (!response.ok || !data.orderId) throw new Error(data.error || "Could not place your order.");
+      if (!response.ok || !data.orderId) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not place your order."));
       setOrderId(data.orderId);
       setProofSubmitted(false);
       setNotice("");
       setView("checkout");
       setRoute(`/?menu=${menu.id}&checkout=${data.orderId}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something went wrong.");
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
     } finally {
       setLoading(false);
     }
@@ -514,14 +551,14 @@ export default function Home() {
       form.append("proof", proof);
       const response = await fetch(`/api/orders/${orderId}/proof`, { method: "POST", body: form });
       const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error || "Could not upload this image.");
-      setNotice("Payment proof sent. The menu creator will review it.");
+      if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not upload this image."));
+      setNotice(t("proofSent"));
       setProofSubmitted(true);
       setProof(null);
       const menuResponse = await fetch(`/api/menus/${menu.id}`);
       if (menuResponse.ok) setMenu(await menuResponse.json() as Menu);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something went wrong.");
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
     } finally {
       setLoading(false);
     }
@@ -538,10 +575,10 @@ export default function Home() {
         body: JSON.stringify({ status: order.status === "paid" ? "unpaid" : "paid" }),
       });
       const data = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(data.error || "Could not update this order.");
+      if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not update this order."));
       await loadMenu(menu.id, true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something went wrong.");
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
     }
   }
 
@@ -557,12 +594,12 @@ export default function Home() {
       });
       const data = await response.json() as { showPublicOrders?: boolean; error?: string };
       if (!response.ok || typeof data.showPublicOrders !== "boolean") {
-        throw new Error(data.error || "Could not update order-list visibility.");
+        throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not update order-list visibility."));
       }
       setMenu({ ...menu, showPublicOrders: data.showPublicOrders });
-      setNotice(data.showPublicOrders ? "Guest order list is now visible." : "Guest order list is now hidden.");
+      setNotice(data.showPublicOrders ? t("guestOrderVisible") : t("guestOrderHidden"));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something went wrong.");
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
     }
   }
 
@@ -614,12 +651,12 @@ export default function Home() {
         body: buildMenuFormData(),
       });
       const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error || "Could not update the menu.");
+      if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not update the menu."));
       setEditMode(false);
       await loadMenu(menu.id, true);
-      setNotice("Menu updated.");
+      setNotice(t("menuUpdated"));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something went wrong.");
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
     } finally {
       setLoading(false);
     }
@@ -647,12 +684,12 @@ export default function Home() {
       temporaryInput.remove();
     }
     setShareFallback(copied ? "" : text);
-    setNotice(copied ? successMessage : "Copy is blocked by this browser. Use the link shown below.");
+    setNotice(copied ? successMessage : t("copyBlocked"));
   }
 
   async function copyShareLink() {
     if (!menu) return;
-    await copyTextWithFallback(`${window.location.origin}/?menu=${menu.id}`, "Order link copied.");
+    await copyTextWithFallback(`${window.location.origin}/?menu=${menu.id}`, t("orderLinkCopied"));
   }
 
   async function copyCreatorLink() {
@@ -660,7 +697,7 @@ export default function Home() {
     const key = creatorKey || localStorage.getItem(creatorKeyName(menu.id));
     if (!key) return;
     const link = `${window.location.origin}/?menu=${menu.id}&manage=1#key=${encodeURIComponent(key)}`;
-    await copyTextWithFallback(link, "Private creator link copied. Keep it safe.");
+    await copyTextWithFallback(link, t("creatorLinkCopied"));
   }
 
   const goHome = () => {
@@ -695,23 +732,23 @@ export default function Home() {
     return (
       <>
         <label>
-          Menu name
-          <input required maxLength={80} value={menuTitle} onChange={(event) => setMenuTitle(event.target.value)} placeholder="Friday lunch" />
+          {t("menuName")}
+          <input required maxLength={80} value={menuTitle} onChange={(event) => setMenuTitle(event.target.value)} placeholder={t("menuNamePlaceholder")} />
         </label>
         <label>
-          A short note <span className="optional">optional</span>
-          <textarea maxLength={240} value={menuNote} onChange={(event) => setMenuNote(event.target.value)} placeholder="Orders close at 11:30" />
+          {t("shortNote")} <span className="optional">{t("optional")}</span>
+          <textarea maxLength={240} value={menuNote} onChange={(event) => setMenuNote(event.target.value)} placeholder={t("shortNotePlaceholder")} />
         </label>
         <div className="item-builder">
-          <div className="section-label"><span>Items</span><span>{draftItems.length}</span></div>
+          <div className="section-label"><span>{t("items")}</span><span>{draftItems.length}</span></div>
           {draftItems.map((item, index) => (
             <div className="draft-item" key={item.id || index}>
-              <input aria-label={`Item ${index + 1} name`} required maxLength={80} value={item.name} onChange={(event) => updateDraft(index, "name", event.target.value)} placeholder="Item name" />
+              <input aria-label={`Item ${index + 1} name`} required maxLength={80} value={item.name} onChange={(event) => updateDraft(index, "name", event.target.value)} placeholder={t("itemNamePlaceholder")} />
               <div className="price-input">
                 <span>Rp</span>
                 <input aria-label={`Item ${index + 1} price in rupiah`} required min="1" step="1" type="number" value={item.price} onChange={(event) => updateDraft(index, "price", event.target.value)} placeholder="25000" />
               </div>
-              <input className="item-description" aria-label={`Item ${index + 1} description`} maxLength={140} value={item.description} onChange={(event) => updateDraft(index, "description", event.target.value)} placeholder="Description (optional)" />
+              <input className="item-description" aria-label={`Item ${index + 1} description`} maxLength={140} value={item.description} onChange={(event) => updateDraft(index, "description", event.target.value)} placeholder={t("descriptionPlaceholder")} />
               <label className="item-image-field">
                 {item.imageUrl && !item.imageFile && !brokenEditImages.includes(item.imageUrl) ? (
                   <img
@@ -722,7 +759,7 @@ export default function Home() {
                 ) : item.imageUrl && brokenEditImages.includes(item.imageUrl) ? (
                   <span className="image-placeholder broken-image-placeholder">!</span>
                 ) : <span className="image-placeholder">＋</span>}
-                <span>{item.imageFile?.name || (item.imageUrl ? "Change image" : "Add image")} <small>optional · max 4 MB</small></span>
+                <span>{item.imageFile?.name || (item.imageUrl ? t("changeImage") : t("addImage"))} <small>{t("imageHint")}</small></span>
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
@@ -736,21 +773,21 @@ export default function Home() {
                 />
               </label>
               {item.imageUrl ? (
-                <button type="button" className="remove-image" onClick={() => setDraftItems((items) => items.map((entry, itemIndex) => itemIndex === index ? { ...entry, imageUrl: null, imageFile: null } : entry))}>Remove image</button>
+                <button type="button" className="remove-image" onClick={() => setDraftItems((items) => items.map((entry, itemIndex) => itemIndex === index ? { ...entry, imageUrl: null, imageFile: null } : entry))}>{t("removeImage")}</button>
               ) : null}
               {draftItems.length > 1 ? (
                 <button type="button" className="remove" aria-label={`Remove item ${index + 1}`} onClick={() => setDraftItems((items) => items.filter((_, itemIndex) => itemIndex !== index))}>×</button>
               ) : null}
             </div>
           ))}
-          <button type="button" className="add-item" onClick={() => setDraftItems((items) => [...items, { name: "", description: "", price: "", imageUrl: null, imageFile: null }])}>+ Add another item</button>
+          <button type="button" className="add-item" onClick={() => setDraftItems((items) => [...items, { name: "", description: "", price: "", imageUrl: null, imageFile: null }])}>{t("addAnotherItem")}</button>
         </div>
         <label>
-          Payment instructions <span className="optional">optional</span>
-          <textarea maxLength={500} value={paymentInstructions} onChange={(event) => setPaymentInstructions(event.target.value)} placeholder="Bank name and transfer details" />
+          {t("paymentInstructions")} <span className="optional">{t("optional")}</span>
+          <textarea maxLength={500} value={paymentInstructions} onChange={(event) => setPaymentInstructions(event.target.value)} placeholder={t("paymentInstructionsPlaceholder")} />
         </label>
         <label className="payment-image-field">
-          <span>Payment instruction image <small>optional · max 4 MB</small></span>
+          <span>{t("paymentInstructionImage")} <small>{t("imageHint")}</small></span>
           {paymentImageUrl && !paymentImageFile && !brokenEditImages.includes(paymentImageUrl) ? (
             <img
               src={editPreviewUrl(paymentImageUrl)}
@@ -758,10 +795,10 @@ export default function Home() {
               onError={(event) => handleEditImageError(event, paymentImageUrl)}
             />
           ) : paymentImageUrl && brokenEditImages.includes(paymentImageUrl) ? (
-            <span className="payment-image-error">Image preview unavailable — choose a replacement</span>
+            <span className="payment-image-error">{t("imagePreviewUnavailable")}</span>
           ) : null}
           <span className="payment-image-action">
-            {paymentImageFile?.name || (paymentImageUrl ? "Change image" : "Choose an image")}
+            {paymentImageFile?.name || (paymentImageUrl ? t("changeImage") : t("chooseImage"))}
           </span>
           <input
             type="file"
@@ -784,7 +821,7 @@ export default function Home() {
               setPaymentImageFile(null);
             }}
           >
-            Remove payment image
+            {t("removePaymentImage")}
           </button>
         ) : null}
       </>
@@ -798,17 +835,34 @@ export default function Home() {
           <span className="brand-mark">m</span>
           <span>MI Jajan</span>
         </button>
-        {menu && view !== "manage" && creatorKey ? (
-          <button
-            className="text-button"
-            onClick={() => {
-              setRoute(`/?menu=${menu.id}&manage=1`);
-              void loadMenu(menu.id, true);
-            }}
-          >
-            Manage
-          </button>
-        ) : null}
+        <div style={{ marginLeft: "auto", display: "flex", gap: "16px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "8px", fontSize: "13px", alignItems: "center" }}>
+            <button 
+              type="button" 
+              className="text-button" 
+              style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: lang === "id" ? 800 : 400, color: lang === "id" ? "var(--ink)" : "var(--muted)" }}
+              onClick={() => changeLang("id")}
+            ><img src="/id.svg" width="16" alt="ID" style={{ display: "block", borderRadius: "2px" }} /> ID</button>
+            <span style={{ color: "var(--line)", display: "flex", alignItems: "center" }}>|</span>
+            <button 
+              type="button" 
+              className="text-button" 
+              style={{ display: "flex", alignItems: "center", gap: "4px", fontWeight: lang === "en" ? 800 : 400, color: lang === "en" ? "var(--ink)" : "var(--muted)" }}
+              onClick={() => changeLang("en")}
+            ><img src="/gb.svg" width="16" alt="EN" style={{ display: "block", borderRadius: "2px" }} /> EN</button>
+          </div>
+          {menu && view !== "manage" && creatorKey ? (
+            <button
+              className="text-button"
+              onClick={() => {
+                setRoute(`/?menu=${menu.id}&manage=1`);
+                void loadMenu(menu.id, true);
+              }}
+            >
+              Manage
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <section className="shell">
@@ -822,18 +876,18 @@ export default function Home() {
 
         {view === "home" ? (
           <div className="hero">
-            <p className="eyebrow">Group ordering, minus the group chat chaos.</p>
-            <h1>A tiny menu.<br />A tidy order list.</h1>
+            <p className="eyebrow">{t("heroEyebrow")}</p>
+            <h1>{t("heroTitleLine1")}<br />{t("heroTitleLine2")}</h1>
             <p className="hero-copy">
-              Create a menu, share one link, collect payment proof, and mark orders paid.
+              {t("heroCopy")}
             </p>
             <button className="primary large" onClick={() => setView("create")}>
-              Create a menu <span>→</span>
+              {t("createMenuBtn").replace(" →", "")} <span>→</span>
             </button>
             <div className="steps" aria-label="How it works">
-              <span><b>1</b> Make</span>
-              <span><b>2</b> Share</span>
-              <span><b>3</b> Track</span>
+              <span><b>1</b> {t("step1")}</span>
+              <span><b>2</b> {t("step2")}</span>
+              <span><b>3</b> {t("step3")}</span>
             </div>
           </div>
         ) : null}
@@ -841,24 +895,24 @@ export default function Home() {
         {view === "create" ? (
           <form className="panel create-panel" onSubmit={createMenu}>
             <div className="panel-heading">
-              <button type="button" className="back" onClick={goHome}>← Back</button>
-              <p className="eyebrow">New menu</p>
-              <h1>What’s on the table?</h1>
+              <button type="button" className="back" onClick={goHome}>{t("back")}</button>
+              <p className="eyebrow">{t("newMenu")}</p>
+              <h1>{t("whatsOnTheTable")}</h1>
             </div>
             {menuFields()}
-            <button className="primary" disabled={loading || imageProcessing}>{imageProcessing ? "Optimizing image…" : loading ? "Creating…" : "Create & share"}</button>
+            <button className="primary" disabled={loading || imageProcessing}>{imageProcessing ? t("optimizingImage") : loading ? t("creating") : t("createAndShare")}</button>
           </form>
         ) : null}
 
         {view === "menu" && menu ? (
           <form className="menu-layout" onSubmit={placeOrder}>
             <div className="menu-intro">
-              <p className="eyebrow">Open order</p>
+              <p className="eyebrow">{t("openOrder")}</p>
               <h1>{menu.title}</h1>
               {menu.note ? <p>{menu.note}</p> : null}
             </div>
             <div className="menu-card">
-              {menu.items.map((item) => {
+              {menu.items.length ? menu.items.map((item) => {
                 const quantity = quantities[item.id] || 0;
                 return (
                   <div className="menu-item" key={item.id}>
@@ -884,40 +938,45 @@ export default function Home() {
                     </div>
                   </div>
                 );
-              })}
+              }) : (
+                <div className="empty menu-empty">
+                  <h2>{t("noItemsAvailable")}</h2>
+                  <p>{t("noItemsInStock")}</p>
+                </div>
+              )}
             </div>
             <div className="order-footer">
               <label>
-                Your name
-                <input required maxLength={80} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Name for the order" />
+                {t("yourName")}
+                <input required maxLength={80} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={t("nameForOrder")} />
               </label>
               <label>
-                Note for seller <span className="optional">optional</span>
+                {t("noteForSeller")} <span className="optional">{t("optional")}</span>
                 <textarea
                   className="seller-note-input"
                   maxLength={300}
                   value={sellerNote}
                   onChange={(event) => setSellerNote(event.target.value)}
-                  placeholder="No chili, pack separately, or anything else…"
+                  placeholder={t("sellerNotePlaceholder")}
                 />
               </label>
-              <div className="total-row"><span>Total</span><strong>{formatMoney(totalCents)}</strong></div>
-              <button className="primary" disabled={loading || totalCents === 0}>{loading ? "Saving…" : "Continue to checkout"}</button>
+              <div className="total-row"><span>{t("total")}</span><strong>{formatMoney(totalCents)}</strong></div>
+              <button className="primary" disabled={loading || totalCents === 0}>{loading ? t("saving") : t("continueToCheckout")}</button>
             </div>
-            {menu.showPublicOrders ? <OrderList orders={menu.orders || []} /> : null}
+            {menu.showPublicOrders ? <OrderList orders={menu.orders || []} lang={lang} /> : null}
           </form>
         ) : null}
 
         {view === "checkout" && menu ? (
           <div className="checkout panel">
             <div className="panel-heading">
-              <p className="eyebrow">Checkout</p>
-              <h1>Almost done.</h1>
-              <p>Your order is in. Send the transfer, then attach a screenshot or photo below.</p>
+              <p className="eyebrow">{t("checkout")}</p>
+              <h1>{t("almostDone")}</h1>
+              <p>{t("checkoutInstructions")}</p>
             </div>
             {menu.paymentInstructions || menu.paymentImageUrl ? (
               <div className="payment-note">
-                <span>Payment details</span>
+                <span>{t("paymentDetails")}</span>
                 {menu.paymentInstructions ? <p>{menu.paymentInstructions}</p> : null}
                 {menu.paymentImageUrl ? (
                   <button
@@ -935,20 +994,20 @@ export default function Home() {
               <>
                 <div className="done-state">
                   <div className="check">✓</div>
-                  <h2>Proof received</h2>
-                  <p>Your status will update after the creator reviews it.</p>
+                  <h2>{t("proofReceived")}</h2>
+                  <p>{t("proofStatusUpdate")}</p>
                   <button type="button" className="secondary back-to-menu" onClick={() => void returnToMenu()}>
-                    ← Back to menu
+                    {t("backToMenu")}
                   </button>
                 </div>
-                {menu.showPublicOrders ? <OrderList orders={menu.orders || []} /> : null}
+                {menu.showPublicOrders ? <OrderList orders={menu.orders || []} lang={lang} /> : null}
               </>
             ) : (
               <form onSubmit={uploadProof}>
                 <label className={`upload ${proofPreview ? "has-preview" : ""}`}>
                   {proofPreview ? <img src={proofPreview} alt="Selected payment proof" /> : <span className="upload-icon">↑</span>}
-                  <span>{proof ? proof.name : "Choose an image"}</span>
-                  <small>PNG, JPG or WebP · max 4 MB</small>
+                  <span>{proof ? proof.name : t("chooseAnImage")}</span>
+                  <small>{t("imageFormatHint")}</small>
                   <input
                     required
                     type="file"
@@ -962,9 +1021,9 @@ export default function Home() {
                     disabled={imageProcessing}
                   />
                 </label>
-                <button className="primary" disabled={loading || imageProcessing || !proof}>{imageProcessing ? "Optimizing image…" : loading ? "Uploading…" : "Submit payment proof"}</button>
+                <button className="primary" disabled={loading || imageProcessing || !proof}>{imageProcessing ? t("optimizingImage") : loading ? t("uploading") : t("submitPaymentProof")}</button>
                 <button type="button" className="outline-button cancel-order-button" disabled={loading} onClick={openCancelPrompt}>
-                  Cancel order
+                  {t("cancelOrder")}
                 </button>
               </form>
             )}
@@ -976,25 +1035,25 @@ export default function Home() {
             {editMode ? (
               <form className="panel create-panel manage-editor" onSubmit={updateMenu}>
                 <div className="panel-heading editor-heading">
-                  <button type="button" className="back" onClick={() => setEditMode(false)}>← Cancel</button>
-                  <p className="eyebrow">Edit menu</p>
-                  <h1>Keep it fresh.</h1>
+                  <button type="button" className="back" onClick={() => setEditMode(false)}>{t("cancel")}</button>
+                  <p className="eyebrow">{t("editMenu")}</p>
+                  <h1>{t("keepItFresh")}</h1>
                 </div>
                 {menuFields()}
-                <button className="primary" disabled={loading || imageProcessing}>{imageProcessing ? "Optimizing image…" : loading ? "Saving…" : "Save menu changes"}</button>
+                <button className="primary" disabled={loading || imageProcessing}>{imageProcessing ? t("optimizingImage") : loading ? t("saving") : t("saveMenuChanges")}</button>
               </form>
             ) : (
               <>
                 <div className="manage-heading">
                   <div>
-                    <p className="eyebrow">Creator view</p>
+                    <p className="eyebrow">{t("creatorView")}</p>
                     <h1>{menu.title}</h1>
                     <p>{menu.orders?.length || 0} order{menu.orders?.length === 1 ? "" : "s"}</p>
                   </div>
                   <div className="share-actions">
-                    <button type="button" className="secondary" onClick={copyShareLink}>Copy order link</button>
+                    <button type="button" className="secondary" onClick={copyShareLink}>{t("copyOrderLink")}</button>
                     <button type="button" className="outline-button" onClick={beginMenuEdit}>Edit menu</button>
-                    <button type="button" className="text-button" onClick={copyCreatorLink}>Copy private creator link</button>
+                    <button type="button" className="text-button" onClick={copyCreatorLink}>{t("copyCreatorLink")}</button>
                   </div>
                 </div>
                 {shareFallback ? (
@@ -1010,8 +1069,8 @@ export default function Home() {
                 ) : null}
                 <div className="public-visibility-setting">
                   <div>
-                    <strong>Show who ordered</strong>
-                    <span>Let guests see names, items, totals, and payment status.</span>
+                    <strong>{t("showWhoOrdered")}</strong>
+                    <span>{t("showWhoOrderedDescription")}</span>
                   </div>
                   <button
                     type="button"
@@ -1021,13 +1080,14 @@ export default function Home() {
                     onClick={() => void togglePublicOrderVisibility()}
                   >
                     <span className="switch-track" aria-hidden="true"><span /></span>
-                    <span>{menu.showPublicOrders ? "Shown" : "Hidden"}</span>
+                    <span>{menu.showPublicOrders ? t("shown") : t("hidden")}</span>
                   </button>
                 </div>
                 <OrderList
                   orders={menu.orders || []}
                   creator
                   creatorKey={creatorKey}
+                  lang={lang}
                   onToggle={(order) => void toggleStatus(order)}
                   onPreview={setPreviewImage}
                 />
@@ -1046,8 +1106,9 @@ export default function Home() {
           setCancelPromptOpen(false);
           void cancelOrder();
         }}
+        lang={lang}
       />
-      <footer>Small orders, beautifully organized.</footer>
+      <footer>{t("footer")}</footer>
     </main>
   );
 }
