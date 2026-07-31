@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function proxy(request: NextRequest) {
+export default function middleware(request: NextRequest) {
   const url = request.nextUrl;
   
   if (url.hostname === 'simple-invoicing.kdmp.workers.dev') {
@@ -23,4 +23,5 @@ export const config = {
      */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
+  runtime: 'experimental-edge',
 };
