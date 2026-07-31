@@ -23,6 +23,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const database = await readDatabase();
     const order = database.orders.find((entry) => entry.id === id);
     if (!order) return jsonError("Order not found.", 404);
+    if (order.status === "paid") return jsonError("Order is already paid.");
     const savedImage = await saveImage(proof, "proof");
     await removeUpload(order.proofFile);
     await updateDatabase((nextDatabase) => {

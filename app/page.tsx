@@ -170,7 +170,7 @@ function CancelOrderDialog({
         <p id="cancel-order-description">{t("cancelOrderDescription")}</p>
         <div className="cancel-dialog-actions">
           <button type="button" className="outline-button" onClick={onClose} autoFocus>{t("keepOrder")}</button>
-          <button type="button" className="secondary danger-button" onClick={onConfirm}>{t("cancelOrder")}</button>
+          <button type="button" className="soft-danger-button" onClick={onConfirm}>{t("cancelOrder")}</button>
         </div>
       </div>
     </div>
@@ -258,7 +258,7 @@ function OrderList({
                 <span>{order.status === "paid" ? t("paid") : t("unpaid")}</span>
               </button>
             ) : (
-              <span className={`status ${order.status}`}><i /> {order.status === "paid" ? t("paid") : t("unpaid")}</span>
+              <span className={`status ${order.status === "paid" ? "paid" : order.proofKey ? "pending" : "unpaid"}`}><i /> {order.status === "paid" ? t("paid") : order.proofKey ? t("pending") : t("unpaid")}</span>
             )}
           </div>
         </article>
@@ -300,6 +300,10 @@ export default function Home() {
   const [brokenEditImages, setBrokenEditImages] = useState<string[]>([]);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view, proofSubmitted, editMode]);
+
+  useEffect(() => {
     if (!notice) return;
     const dismissTimer = window.setTimeout(() => setNotice(""), 15_000);
     return () => window.clearTimeout(dismissTimer);
@@ -321,7 +325,17 @@ export default function Home() {
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [view, quantities, proofSubmitted, editMode]);
+  }, [view, quantities, proofSubmitted, editMode, paidOffline]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      if (view === "checkout" && orderId && !proofSubmitted && !paidOffline) {
+        navigator.sendBeacon(`/api/orders/${orderId}`);
+      }
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [view, orderId, proofSubmitted, paidOffline]);
 
   useEffect(() => {
     const saved = localStorage.getItem("mi-jajan-lang") as Language;
@@ -534,6 +548,7 @@ export default function Home() {
       if (!response.ok || !data.orderId) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not place your order."));
       setOrderId(data.orderId);
       setProofSubmitted(false);
+      setPaidOffline(false);
       setNotice("");
       setView("checkout");
       setRoute(`/?menu=${menu.id}&checkout=${data.orderId}`);
@@ -557,6 +572,7 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not upload this image."));
       setNotice(t("proofSent"));
       setProofSubmitted(true);
+      setPaidOffline(false);
       setProof(null);
       const menuResponse = await fetch(`/api/menus/${menu.id}`);
       if (menuResponse.ok) setMenu(await menuResponse.json() as Menu);
@@ -992,27 +1008,6 @@ export default function Home() {
 
         {view === "checkout" && menu ? (
           <div className="checkout panel">
-            <div className="panel-heading">
-              <p className="eyebrow">{t("checkout")}</p>
-              <h1>{t("almostDone")}</h1>
-              <p>{t("checkoutInstructions")}</p>
-            </div>
-            {menu.paymentInstructions || menu.paymentImageUrl ? (
-              <div className="payment-note">
-                <span>{t("paymentDetails")}</span>
-                {menu.paymentInstructions ? <p>{menu.paymentInstructions}</p> : null}
-                {menu.paymentImageUrl ? (
-                  <button
-                    type="button"
-                    className="previewable-image payment-preview-button"
-                    onClick={() => setPreviewImage({ src: menu.paymentImageUrl!, alt: "Payment instructions" })}
-                    aria-label="Preview payment instruction image"
-                  >
-                    <img src={menu.paymentImageUrl} alt="" />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
             {proofSubmitted ? (
               <>
                 <div className="done-state">
@@ -1026,30 +1021,64 @@ export default function Home() {
                 {menu.showPublicOrders ? <OrderList orders={menu.orders || []} lang={lang} /> : null}
               </>
             ) : (
-              <form onSubmit={uploadProof}>
-                <label className={`upload ${proofPreview ? "has-preview" : ""}`}>
-                  {proofPreview ? <img src={proofPreview} alt="Selected payment proof" /> : <span className="upload-icon">↑</span>}
-                  <span>{proof ? proof.name : t("chooseAnImage")}</span>
-                  <small>{t("imageFormatHint")}</small>
-                  <input
-                    required
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={(event) => {
-                      const input = event.currentTarget;
-                      void prepareSelectedImage(input.files?.[0] || null, input).then((file) => {
-                        if (file !== undefined) setProof(file);
-                      });
-                    }}
-                    disabled={imageProcessing}
-                  />
-                </label>
-                <button className="primary" disabled={loading || imageProcessing || !proof}>{imageProcessing ? t("optimizingImage") : loading ? t("uploading") : t("submitPaymentProof")}</button>
-                <button type="button" className="secondary" disabled={loading || imageProcessing} onClick={payOffline} style={{ width: "100%", marginTop: "10px" }}>{t("payOffline")}</button>
-                <button type="button" className="outline-button cancel-order-button" disabled={loading} onClick={openCancelPrompt}>
-                  {t("cancelOrder")}
-                </button>
+              <>
+                <div className="panel-heading">
+                  <p className="eyebrow">{t("checkout")}</p>
+                  <h1>{t("almostDone")}</h1>
+                  <p>{t("checkoutInstructions")}</p>
+                </div>
+                {menu.paymentInstructions || menu.paymentImageUrl ? (
+                  <div className="payment-note">
+                    <span>{t("paymentDetails")}</span>
+                    {menu.paymentInstructions ? <p>{menu.paymentInstructions}</p> : null}
+                    {menu.paymentImageUrl ? (
+                      <button
+                        type="button"
+                        className="previewable-image payment-preview-button"
+                        onClick={() => setPreviewImage({ src: menu.paymentImageUrl!, alt: "Payment instructions" })}
+                        aria-label="Preview payment instruction image"
+                      >
+                        <img src={menu.paymentImageUrl} alt="" />
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                <form onSubmit={uploadProof}>
+                <div className="checkout-primary-action">
+                  <label className={`upload ${proofPreview ? "has-preview" : ""}`}>
+                    {proofPreview ? <img src={proofPreview} alt="Selected payment proof" /> : <span className="upload-icon">↑</span>}
+                    <span>{proof ? proof.name : t("chooseAnImage")}</span>
+                    <small>{t("imageFormatHint")}</small>
+                    <input
+                      required
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(event) => {
+                        const input = event.currentTarget;
+                        void prepareSelectedImage(input.files?.[0] || null, input).then((file) => {
+                          if (file !== undefined) setProof(file);
+                        });
+                      }}
+                      disabled={imageProcessing}
+                    />
+                  </label>
+                  <button className="primary" disabled={loading || imageProcessing || !proof}>
+                    {imageProcessing ? t("optimizingImage") : (loading && proof ? t("uploading") : t("submitPaymentProof"))}
+                  </button>
+                </div>
+                
+                <div className="alternative-actions-divider">
+                  <span>{t("or")}</span>
+                </div>
+
+                <div className="checkout-alternative-actions">
+                  <button type="button" className="secondary" disabled={loading || imageProcessing} onClick={payOffline}>{t("payOffline")}</button>
+                  <button type="button" className="soft-danger-button cancel-order-button" disabled={loading} onClick={openCancelPrompt}>
+                    {t("cancelOrder")}
+                  </button>
+                </div>
               </form>
+              </>
             )}
           </div>
         ) : null}

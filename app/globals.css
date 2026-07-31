@@ -162,6 +162,24 @@ h1 {
 
 .text-button:hover, .back:hover { color: var(--ink); }
 
+.soft-danger-button {
+  min-height: 42px;
+  border: 1px solid #eab6a9;
+  border-radius: 7px;
+  padding: 10px 15px;
+  background: var(--red-soft);
+  color: #a33e29;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.soft-danger-button:hover {
+  background: #fae5df;
+  border-color: #df9e8e;
+}
+
 .steps {
   width: min(100%, 430px);
   margin: 74px auto 0;
@@ -222,7 +240,7 @@ input:focus, textarea:focus { border-color: #aaa69c; box-shadow: 0 0 0 3px rgba(
 
 .item-builder { margin: 34px 0; }
 .section-label {
-  margin-bottom: 2px;
+  margin-bottom: 24px;
   display: flex;
   justify-content: space-between;
   color: var(--muted);
@@ -548,7 +566,48 @@ input:focus, textarea:focus { border-color: #aaa69c; box-shadow: 0 0 0 3px rgba(
 .done-state h2 { margin-bottom: 10px; }
 .done-state p { color: var(--muted); line-height: 1.6; }
 .back-to-menu { margin-top: 18px; }
-.cancel-order-button { width: 100%; margin-top: 12px; }
+
+.checkout-primary-action {
+  padding-bottom: 24px;
+}
+
+.alternative-actions-divider {
+  position: relative;
+  margin: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.alternative-actions-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
+  z-index: 0;
+}
+.alternative-actions-divider span {
+  position: relative;
+  z-index: 1;
+  background: var(--paper);
+  padding: 0 16px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.checkout-alternative-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.checkout-alternative-actions button {
+  width: 100%;
+}
 
 .manage { width: min(100%, 900px); }
 .manage-heading {
@@ -632,6 +691,8 @@ input:focus, textarea:focus { border-color: #aaa69c; box-shadow: 0 0 0 3px rgba(
 .status.unpaid i { background: var(--accent); }
 .status.paid { background: var(--green-soft); color: var(--green); }
 .status.paid i { background: var(--green); }
+.status.pending { background: #fcefc7; color: #a16b00; }
+.status.pending i { background: #e09b00; }
 .payment-switch,
 .visibility-toggle-button {
   min-height: 36px;
@@ -852,8 +913,7 @@ input:focus, textarea:focus { border-color: #aaa69c; box-shadow: 0 0 0 3px rgba(
 .cancel-dialog-card > p:not(.eyebrow) { margin: 0; color: var(--muted); line-height: 1.55; }
 .cancel-dialog-actions { margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px; }
 .cancel-dialog-actions button { width: auto; }
-.danger-button { background: var(--accent); border-color: var(--accent); }
-.danger-button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+
 
 footer {
   height: 66px;

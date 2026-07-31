@@ -21,3 +21,5 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     return jsonError(cause instanceof Error ? cause.message : "Could not cancel this order.");
   }
 }
+
+export const POST = DELETE;

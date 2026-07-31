@@ -66,7 +66,8 @@ export const translations = {
     // Checkout View
     checkout: "Checkout",
     almostDone: "Almost done.",
-    checkoutInstructions: "Your order is in. Send the transfer, then attach a screenshot or photo below.",
+    or: "or",
+    checkoutInstructions: "Your order is in! Please complete your payment via transfer and upload the proof below, or choose another method.",
     paymentDetails: "Payment details",
     proofReceived: "Proof received",
     proofStatusUpdate: "Your status will update after the creator reviews it.",
@@ -75,8 +76,8 @@ export const translations = {
     chooseAnImage: "Choose an image",
     imageFormatHint: "PNG, JPG or WebP · max 4 MB",
     submitPaymentProof: "Submit payment proof",
-    payOffline: "Pay in cash",
-    offlineCash: "Cash",
+    payOffline: "Pay in cash / QRIS / Other Method",
+    offlineCash: "Cash / QRIS / Other Method",
     paidOfflineMsg: "We've notified the creator you'll pay in cash.",
     cancelOrder: "Cancel order",
 
@@ -107,6 +108,7 @@ export const translations = {
     noProof: "No proof",
     paid: "Paid",
     unpaid: "Unpaid",
+    pending: "Pending",
 
     // Notices & Errors
     orderCancelled: "Order cancelled.",
@@ -186,7 +188,8 @@ export const translations = {
     // Checkout View
     checkout: "Pembayaran",
     almostDone: "Hampir selesai.",
-    checkoutInstructions: "Pesananmu sudah masuk. Silakan transfer, lalu lampirkan bukti pembayaran di bawah ini.",
+    or: "atau",
+    checkoutInstructions: "Pesananmu sudah masuk! Silakan transfer dan lampirkan bukti di bawah ini, atau pilih metode pembayaran lain.",
     paymentDetails: "Detail pembayaran",
     proofReceived: "Bukti diterima",
     proofStatusUpdate: "Statusmu akan diperbarui setelah dicek oleh pembuat menu.",
@@ -195,8 +198,8 @@ export const translations = {
     chooseAnImage: "Pilih gambar",
     imageFormatHint: "PNG, JPG atau WebP · maks 4 MB",
     submitPaymentProof: "Kirim bukti pembayaran",
-    payOffline: "Bayar Tunai",
-    offlineCash: "Tunai / Cash",
+    payOffline: "Bayar Tunai / QRIS / Metode Lain",
+    offlineCash: "Tunai / QRIS / Metode Lain",
     paidOfflineMsg: "Pesanan dicatat untuk bayar tunai.",
     cancelOrder: "Batalkan pesanan",
 
@@ -227,6 +230,7 @@ export const translations = {
     noProof: "Tidak ada bukti",
     paid: "Lunas",
     unpaid: "Belum lunas",
+    pending: "Menunggu",
 
     // Notices & Errors
     orderCancelled: "Pesanan dibatalkan.",

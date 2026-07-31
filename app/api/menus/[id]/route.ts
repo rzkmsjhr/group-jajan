@@ -2,6 +2,7 @@ import {
   cleanText,
   enforceBodyLimit,
   enforceRateLimit,
+  hashSecret,
   jsonError,
   MenuItemRecord,
   readDatabase,
@@ -35,12 +36,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       .filter((order) => order.menuId === id)
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((order) => ({
-        id: order.id,
+        id: isManage ? order.id : hashSecret(order.id).slice(0, 10),
         customerName: order.customerName,
         sellerNote: isManage ? order.sellerNote || null : null,
         totalCents: order.totalCents,
         status: order.status,
-        proofKey: isManage ? order.proofFile : null,
+        proofKey: isManage ? order.proofFile : (order.proofFile ? (order.proofFile === "OFFLINE_CASH" ? "OFFLINE_CASH" : "HAS_PROOF") : null),
         createdAt: order.createdAt,
         items: order.items,
       }))

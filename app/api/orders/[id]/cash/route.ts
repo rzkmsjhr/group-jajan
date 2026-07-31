@@ -15,6 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const database = await readDatabase();
     const order = database.orders.find((entry) => entry.id === id);
     if (!order) return jsonError("Order not found.", 404);
+    if (order.status === "paid") return jsonError("Order is already paid.");
     
     // If they had a real proof file previously, we should remove it from R2
     // just in case they switched to cash after uploading.
