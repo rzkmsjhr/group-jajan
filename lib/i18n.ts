@@ -75,6 +75,9 @@ export const translations = {
     chooseAnImage: "Choose an image",
     imageFormatHint: "PNG, JPG or WebP · max 4 MB",
     submitPaymentProof: "Submit payment proof",
+    payOffline: "Pay in cash",
+    offlineCash: "Cash",
+    paidOfflineMsg: "We've notified the creator you'll pay in cash.",
     cancelOrder: "Cancel order",
 
     // Cancel Dialog
@@ -192,6 +195,9 @@ export const translations = {
     chooseAnImage: "Pilih gambar",
     imageFormatHint: "PNG, JPG atau WebP · maks 4 MB",
     submitPaymentProof: "Kirim bukti pembayaran",
+    payOffline: "Bayar Tunai",
+    offlineCash: "Tunai / Cash",
+    paidOfflineMsg: "Pesanan dicatat untuk bayar tunai.",
     cancelOrder: "Batalkan pesanan",
 
     // Cancel Dialog

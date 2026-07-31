@@ -230,7 +230,9 @@ function OrderList({
           <div className={`order-side ${creator ? "" : "public-side"}`}>
             <strong>{formatMoney(order.totalCents)}</strong>
             {creator ? (
-              order.proofKey ? (
+              order.proofKey === "OFFLINE_CASH" ? (
+                <span className="cash-proof" style={{ color: "var(--muted)", fontWeight: 600, fontSize: "13px" }}>{t("offlineCash")}</span>
+              ) : order.proofKey ? (
                 <button
                   type="button"
                   className="proof-link"
@@ -288,6 +290,7 @@ export default function Home() {
   const [proof, setProof] = useState<File | null>(null);
   const [creatorKey, setCreatorKey] = useState("");
   const [proofSubmitted, setProofSubmitted] = useState(false);
+  const [paidOffline, setPaidOffline] = useState(false);
   const [cancelPromptOpen, setCancelPromptOpen] = useState(false);
   const [imageProcessing, setImageProcessing] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -307,7 +310,7 @@ export default function Home() {
       view === "create" ||
       (view === "manage" && editMode) ||
       (view === "menu" && Object.keys(quantities).some((k) => quantities[k] > 0)) ||
-      (view === "checkout" && !proofSubmitted);
+      (view === "checkout" && !proofSubmitted && !paidOffline);
 
     if (!hasUnsavedWork) return;
 
@@ -555,6 +558,26 @@ export default function Home() {
       setNotice(t("proofSent"));
       setProofSubmitted(true);
       setProof(null);
+      const menuResponse = await fetch(`/api/menus/${menu.id}`);
+      if (menuResponse.ok) setMenu(await menuResponse.json() as Menu);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t("somethingWentWrong"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function payOffline() {
+    if (!orderId || !menu || loading || imageProcessing) return;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/orders/${orderId}/cash`, { method: "POST" });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not update payment method."));
+      setNotice(t("paidOfflineMsg"));
+      setProofSubmitted(true);
+      setPaidOffline(true);
       const menuResponse = await fetch(`/api/menus/${menu.id}`);
       if (menuResponse.ok) setMenu(await menuResponse.json() as Menu);
     } catch (cause) {
@@ -994,8 +1017,8 @@ export default function Home() {
               <>
                 <div className="done-state">
                   <div className="check">✓</div>
-                  <h2>{t("proofReceived")}</h2>
-                  <p>{t("proofStatusUpdate")}</p>
+                  <h2>{paidOffline ? t("offlineCash") : t("proofReceived")}</h2>
+                  <p>{paidOffline ? t("paidOfflineMsg") : t("proofStatusUpdate")}</p>
                   <button type="button" className="secondary back-to-menu" onClick={() => void returnToMenu()}>
                     {t("backToMenu")}
                   </button>
@@ -1022,6 +1045,7 @@ export default function Home() {
                   />
                 </label>
                 <button className="primary" disabled={loading || imageProcessing || !proof}>{imageProcessing ? t("optimizingImage") : loading ? t("uploading") : t("submitPaymentProof")}</button>
+                <button type="button" className="secondary" disabled={loading || imageProcessing} onClick={payOffline} style={{ width: "100%", marginTop: "10px" }}>{t("payOffline")}</button>
                 <button type="button" className="outline-button cancel-order-button" disabled={loading} onClick={openCancelPrompt}>
                   {t("cancelOrder")}
                 </button>
