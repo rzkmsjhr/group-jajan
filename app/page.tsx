@@ -328,16 +328,6 @@ export default function Home() {
   }, [view, quantities, proofSubmitted, editMode, paidOffline]);
 
   useEffect(() => {
-    const handlePageHide = () => {
-      if (view === "checkout" && orderId && !proofSubmitted && !paidOffline) {
-        navigator.sendBeacon(`/api/orders/${orderId}`);
-      }
-    };
-    window.addEventListener("pagehide", handlePageHide);
-    return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [view, orderId, proofSubmitted, paidOffline]);
-
-  useEffect(() => {
     const saved = localStorage.getItem("mi-jajan-lang") as Language;
     if (saved === "en" || saved === "id") setLang(saved);
   }, []);
@@ -403,6 +393,12 @@ export default function Home() {
     try {
       const response = await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
       const data = await response.json() as { error?: string };
+      if (response.status === 404) {
+        setNotice(t("orderNotFoundNotice"));
+        setOrderId("");
+        setView("menu");
+        return;
+      }
       if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not cancel this order."));
       setOrderId("");
       setProof(null);
@@ -569,6 +565,12 @@ export default function Home() {
       form.append("proof", proof);
       const response = await fetch(`/api/orders/${orderId}/proof`, { method: "POST", body: form });
       const data = (await response.json()) as { error?: string };
+      if (response.status === 404) {
+        setNotice(t("orderNotFoundNotice"));
+        setOrderId("");
+        setView("menu");
+        return;
+      }
       if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not upload this image."));
       setNotice(t("proofSent"));
       setProofSubmitted(true);
@@ -590,6 +592,12 @@ export default function Home() {
     try {
       const response = await fetch(`/api/orders/${orderId}/cash`, { method: "POST" });
       const data = (await response.json()) as { error?: string };
+      if (response.status === 404) {
+        setNotice(t("orderNotFoundNotice"));
+        setOrderId("");
+        setView("menu");
+        return;
+      }
       if (!response.ok) throw new Error(data.error ? translateError(lang, data.error) : translateError(lang, "Could not update payment method."));
       setNotice(t("paidOfflineMsg"));
       setProofSubmitted(true);

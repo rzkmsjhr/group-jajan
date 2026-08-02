@@ -112,6 +112,7 @@ export const translations = {
 
     // Notices & Errors
     orderCancelled: "Order cancelled.",
+    orderNotFoundNotice: "Your last order was not found. You can start over here.",
     menuLive: "Your menu is live. Copy the order link and share it.",
     proofSent: "Payment proof sent. The menu creator will review it.",
     guestOrderVisible: "Guest order list is now visible.",
@@ -234,6 +235,7 @@ export const translations = {
 
     // Notices & Errors
     orderCancelled: "Pesanan dibatalkan.",
+    orderNotFoundNotice: "Pesanan terakhir kamu tidak ditemukan. kamu dapat memulai kembali di sini.",
     menuLive: "Menumu sudah aktif. Salin tautan pesanan dan bagikan.",
     proofSent: "Bukti pembayaran terkirim. Pembuat menu akan mengeceknya.",
     guestOrderVisible: "Daftar pesanan kini dapat dilihat tamu.",

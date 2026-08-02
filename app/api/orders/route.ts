@@ -33,6 +33,12 @@ export async function POST(request: Request) {
     const totalCents = selections.reduce((total, item) => total + item.priceCents * item.quantity, 0);
     const orderId = randomUUID();
     await updateDatabase((nextDatabase) => {
+      // Silent Cleanup: Remove any "draft" orders (no proof, unpaid) older than 15 minutes
+      const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
+      nextDatabase.orders = nextDatabase.orders.filter(
+        (o) => !(o.status === "unpaid" && o.proofFile === null && o.createdAt < fifteenMinsAgo)
+      );
+
       nextDatabase.orders.push({
         id: orderId,
         menuId,

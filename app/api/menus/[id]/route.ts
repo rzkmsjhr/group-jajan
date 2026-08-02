@@ -33,7 +33,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const showPublicOrders = menu.showPublicOrders !== false;
   const orders = isManage || showPublicOrders
     ? database.orders
-      .filter((order) => order.menuId === id)
+      .filter((order) => order.menuId === id && (order.status === "paid" || order.proofFile !== null))
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((order) => ({
         id: isManage ? order.id : hashSecret(order.id).slice(0, 10),
